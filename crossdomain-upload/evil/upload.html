@@ -6,6 +6,9 @@
 This is a Proof-of-Concept - the start() function can be invoked automatically.<br><br>
 This is a variation of the technique demonstrated here: http://blog.kotowicz.net/2011/04/how-to-upload-arbitrary-file-contents.html<br><br>
 Other pieces of code were taken from: http://hublog.hubmed.org/archives/001941.html<br><br>
+Tested succesfully with:<br><br>
+Firefox 8.0 and 8.0.1<br><br>
+Chrome 14.0.835.202 and Chrome 15.0.874.121<br><br>
 
 <button type="button" id="upload" onclick="start()"><font size="+2">Upload File</font></button>
 <script>
@@ -105,8 +108,8 @@ function getBinary(file){
 }
 
 function start() {
-	var c = getBinary('maliciousfile.xxx');
-	fileUpload(c, "maliciousfile.xxx");
+	var c = getBinary('maliciousfile.xxx'); // edit this entry
+	fileUpload(c, "maliciousfile.xxx"); // edit this entry
 	
 }
 </script>
